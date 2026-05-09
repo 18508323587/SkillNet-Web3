@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background-color: #0f172a; /* 使用我们定义的深色底 */
+  color: #f1f5f9;
+  font-family: 'Inter', system-ui, sans-serif; /* 建议使用 Inter 字体，更有科技感 */
+}
