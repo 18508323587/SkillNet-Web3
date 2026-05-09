@@ -68,3 +68,10 @@ dist
 
 # 咱们本地的测试高精度账本！千万别传！
 skillnet_reliable_db.json
+
+# 环境变量密码文件 (强烈建议加上！)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
