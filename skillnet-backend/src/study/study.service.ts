@@ -60,21 +60,27 @@ export class StudyService {
       );
 
       let totalEarned = 0;
+      let totalSpent = 0; // 🚀 新增：计算商城消耗积分
       const history: any[] = []; 
 
       for (const log of userLogs) {
-         totalEarned += log.reward;
-         history.push({
-            title: log.title,
-            reward: log.reward,
-            createdAt: log.createdAt
-         });
+         if (log.type === 'redeem') { // 识别兑换记录
+             totalSpent += Number(log.cost || 0);
+         } else { // 学习赚取的记录
+             totalEarned += Number(log.reward || 0);
+             history.push({
+                title: log.title,
+                reward: log.reward,
+                createdAt: log.createdAt
+             });
+         }
       }
 
       // 🚀 精准倒序排列，你刚做的题永远在最上面第一条！
       history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      const currentBalance = 200 + totalEarned;
+      // 🚀 核心修复：真实积分 = 基础分 + 赚取的 - 消耗的
+      const currentBalance = 200 + totalEarned - totalSpent;
 
       return {
         success: true,
@@ -86,6 +92,22 @@ export class StudyService {
       console.error(`查询积分失败: ${error}`);
       return { success: false, address: userAddress, balance: 200, history: [] };
     }
+  }
+
+  // ==========================================
+  // 🛒 预留大招：商城兑换扣除积分（写入高精度账本）
+  // (可供你们后端的 shop.controller 调用)
+  // ==========================================
+  async deductPoints(userAddress: string, itemName: string, cost: number) {
+     const submitTime = new Date().toISOString();
+     this.saveReliableLog({
+        type: 'redeem',
+        address: userAddress,
+        itemName: itemName,
+        cost: cost,
+        createdAt: submitTime
+     });
+     return { success: true };
   }
 
   // ==========================================
@@ -111,6 +133,7 @@ export class StudyService {
 
     // 1. 🚀 写入【高精度本地账本】，绝对不丢任何一个字段和分数！
     this.saveReliableLog({
+        type: 'earn', // 新增：标注类型为学习赚取
         address: userAddress,
         courseId: courseId,
         title: safeTitle,

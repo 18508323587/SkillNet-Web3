@@ -66,11 +66,15 @@ function App() {
     try {
       const addressKey = address.toLowerCase();
       
+      let fetchedBalance = 200; // 默认基础分
+      let totalSpent = 0;       // 用于记录商城花掉的总积分
+
+      // 1. 获取学习增加的积分
       try {
         const balanceRes = await axios.get(`http://localhost:3000/study/balance/${addressKey}`);
         if (balanceRes.data) {
           if (typeof balanceRes.data.balance === 'number') {
-            setUserPoints(balanceRes.data.balance);
+            fetchedBalance = balanceRes.data.balance; // 拿到后端计算的 200 + 学习分
           }
           if (Array.isArray(balanceRes.data.history)) {
             setEarnHistory(balanceRes.data.history); 
@@ -78,15 +82,23 @@ function App() {
         }
       } catch (e) {
         console.warn("后端积分接口异常，回退默认分数");
-        setUserPoints(200); 
       }
 
+      // 2. 获取商城兑换记录，并计算消耗总数
       try {
         const historyRes = await axios.post('http://localhost:3000/shop/history', { userAddress: addressKey });
-        setRedemptionHistory(historyRes.data || []);
+        if (Array.isArray(historyRes.data)) {
+           setRedemptionHistory(historyRes.data);
+           // 累加计算已花掉的积分
+           totalSpent = historyRes.data.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
+        }
       } catch (e) {
         console.warn("未找到兑换记录");
       }
+
+      // 3. 🚀 核心修复：前端聚合计算最终的真实积分
+      // 算法：(初始分 + 学习分) - (兑换消耗的总分)
+      setUserPoints(fetchedBalance - totalSpent);
 
     } catch (err) {
       console.error("同步后端数据失败", err);
@@ -346,6 +358,10 @@ function App() {
 
           try {
              await axios.post('http://localhost:3000/shop/redeem', { userAddress: currentUser, itemName: item.name, cost: item.points });
+             
+             // 🚀 核心修复：一旦兑换成功记录到了后端，前端立刻把积分扣掉，让 UI 瞬间变化！
+             setUserPoints(prevPoints => prevPoints - item.points);
+             
              syncDataFromBackend(userAddress); 
           } catch(e) {
              console.warn("兑换日志写入后端失败");
