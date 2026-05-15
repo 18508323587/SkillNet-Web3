@@ -1,25 +1,41 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ["class"],
   content: [
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}", // 包含所有 tsx 文件
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
-      colors: {
-        // 自定义一组高大上的科技色调
-        brand: {
-          dark: '#0f172a',    // 深蓝底色
-          light: '#f1f5f9',   // 浅灰文字
-          accent: '#38bdf8',  // 天蓝点缀
-          purple: '#c084fc',  // 紫色点缀
+      // 👇 给文字和边框加的流动动画
+      keyframes: {
+        'text-flow': {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+        },
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' }
         }
       },
-      backgroundImage: {
-        // 定义一个炫酷的渐变背景
-        'hero-pattern': "linear-gradient(to bottom right, #0f172a, #1e293b)",
-      }
-    },
+      animation: {
+        'text-flow': 'text-flow 3s ease infinite',
+      },
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
+        secondary: { DEFAULT: "hsl(var(--secondary))", foreground: "hsl(var(--secondary-foreground))" },
+        destructive: { DEFAULT: "hsl(var(--destructive))", foreground: "hsl(var(--destructive-foreground))" },
+        muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
+        accent: { DEFAULT: "hsl(var(--accent))", foreground: "hsl(var(--accent-foreground))" },
+        popover: { DEFAULT: "hsl(var(--popover))", foreground: "hsl(var(--popover-foreground))" },
+        card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
+      },
+      borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)", sm: "calc(var(--radius) - 4px)" }
+    }
   },
   plugins: [],
 }
