@@ -1,87 +1,123 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { ethers } from 'ethers'
 import type { Course } from './types'
-import logoImg from './logo.png' 
-import SkillBadgeData from './abi/SkillBadge.json' 
 
-// 引入工具库 (新增了 ChevronDown 和 ChevronUp 用于下拉框)
+// 🌐 引入波卡 (Polkadot/Substrate) 生态核心依赖
+import { ApiPromise, WsProvider } from '@polkadot/api'
+import { ContractPromise } from '@polkadot/api-contract'
+import { web3Accounts, web3Enable, web3FromAddress } from '@polkadot/extension-dapp'
+
+// ✅ 究极修复：精准匹配你现在的奇葩目录结构 (文件夹 SkillBadge.sol 下的 metadata(1).json)
+import SkillBadgeData from './abi/SkillBadge.sol/metadata(1).json' 
+
+// 引入工具库
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Home, BookOpen, Map, ShoppingBag, User, Bell, Mail, CheckCircle2, Circle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import { Home, BookOpen, ShoppingBag, User, Bell, CheckCircle2, Circle, TrendingUp, Target, Activity, Sparkles, CalendarDays, Zap, Camera, Trophy, Medal, Hexagon, Radio, Compass } from 'lucide-react'
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts'
 
-// 🔌 [接口对接预留]: 模块1 智能合约地址
-const NFT_CONTRACT_ADDRESS = "0x76bced64410c7992f88d1bad7003ec5d67eb4e7e03941fbe6755a706e6b984bd"; 
-const NFT_CONTRACT_ABI = Array.isArray(SkillBadgeData) ? SkillBadgeData : (SkillBadgeData as any).abi;
+// 🔌 [波卡合约配置]
+const WS_PROVIDER_URL = 'ws://127.0.0.1:9944'; // 付同学提供的本地节点
+const CONTRACT_ADDRESS = ''; // ⚠️ 等待付同学把一长串的合约地址发给你后，填在这里！
+// 强行绕过 TypeScript 对 JSON 的严格类型审查
+const NFT_CONTRACT_ABI = SkillBadgeData as any;
 
-// 商城项目 (纯虚拟商品，图片一一对应)
+// 🛒 极客商城商品配置
 const mallItems = [
-  { id: 1, name: '腾讯视频 VIP (1个月)', points: 150, image: 'https://images.unsplash.com/photo-1585647347384-259252771d1b?q=80&w=400&auto=format&fit=crop' },
-  { id: 2, name: '腾讯视频 VIP (1年)', points: 1500, image: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=400&auto=format&fit=crop' },
-  { id: 3, name: '哔哩哔哩 大会员 (1个月)', points: 180, image: 'https://images.unsplash.com/photo-1613376023733-f5424df9fa32?q=80&w=400&auto=format&fit=crop' },
-  { id: 4, name: '哔哩哔哩 大会员 (1年)', points: 1800, image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=400&auto=format&fit=crop' },
-  { id: 5, name: '网易云音乐 黑胶VIP (1个月)', points: 100, image: 'https://images.unsplash.com/photo-1460036521480-ff49c08c2781?q=80&w=400&auto=format&fit=crop' },
-  { id: 6, name: '网易云音乐 黑胶VIP (1年)', points: 1000, image: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400&auto=format&fit=crop' },
-  { id: 7, name: 'QQ 超级会员 (1个月)', points: 120, image: 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?q=80&w=400&auto=format&fit=crop' },
-  { id: 8, name: 'QQ 超级会员 (1年)', points: 1200, image: 'https://images.unsplash.com/photo-1611162618725-662280ff3df4?q=80&w=400&auto=format&fit=crop' },
-  { id: 9, name: '百度网盘 SVIP (1个月)', points: 200, image: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=400&auto=format&fit=crop' },
-  { id: 10, name: '百度网盘 SVIP (1年)', points: 2000, image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=400&auto=format&fit=crop' },
-  { id: 11, name: '话费充值折扣券 (10元)', points: 100, image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=400&auto=format&fit=crop' },
-  { id: 12, name: '话费充值折扣券 (30元)', points: 300, image: 'https://images.unsplash.com/photo-1592890288564-76628a30a657?q=80&w=400&auto=format&fit=crop' },
-  { id: 13, name: '话费充值折扣券 (50元)', points: 500, image: 'https://images.unsplash.com/photo-1605236453806-6ff36851218e?q=80&w=400&auto=format&fit=crop' },
-  { id: 14, name: '饿了么 超级吃货卡 (1个月)', points: 100, image: 'https://images.unsplash.com/photo-1526367790999-0150786686a2?q=80&w=400&auto=format&fit=crop' },
-  { id: 15, name: '星巴克 30元代金券', points: 300, image: 'https://images.unsplash.com/photo-1558500201-901d898ba82c?q=80&w=400&auto=format&fit=crop' },
-  { id: 16, name: '肯德基 50元代金券', points: 500, image: 'https://images.unsplash.com/photo-1626082927389-6cd097cbc6ec?q=80&w=400&auto=format&fit=crop' },
-  { id: 17, name: '瑞幸咖啡 29元饮品券', points: 290, image: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=400&auto=format&fit=crop' },
-  { id: 18, name: '滴滴出行 50元打车券', points: 500, image: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?q=80&w=400&auto=format&fit=crop' },
-  { id: 19, name: 'ChatGPT Plus 代付 (1个月)', points: 1500, image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=400&auto=format&fit=crop' },
-  { id: 20, name: 'GitHub Copilot 订阅 (1个月)', points: 800, image: 'https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?q=80&w=400&auto=format&fit=crop' }
+  { id: 1, name: 'QQ音乐 绿钻VIP (周卡)', points: 30, image: '/images/qq-zhouka.jpg' },
+  { id: 2, name: 'QQ音乐 绿钻VIP (月卡)', points: 100, image: '/images/qq-yueka.jpg' },
+  { id: 3, name: 'QQ音乐 绿钻VIP (年卡)', points: 1000, image: '/images/qq-nianka.jpg' },
+  { id: 4, name: '饿了么 超级会员 (月卡)', points: 100, image: '/images/elm.jpg' },
+  { id: 5, name: '爱奇艺 黄金VIP (季卡)', points: 450, image: '/images/aiqiyi-jika.jpg' },
+  { id: 6, name: '腾讯视频 VIP (月卡)', points: 150, image: '/images/tengxun-yueka.jpg' },
+  { id: 7, name: '腾讯视频 VIP (年卡)', points: 1500, image: '/images/tengxun-nianka.jpg' },
+  { id: 8, name: '美团 超级外卖红包', points: 50, image: '/images/meituan.jpg' }
 ];
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'library' | 'path' | 'mall' | 'profile'>('home') 
+  // 核心导航栏状态
+  const [activeTab, setActiveTab] = useState<'home' | 'library' | 'tasks' | 'mall' | 'profile'>('home') 
   const [userAddress, setUserAddress] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
   
-  // 核心状态：严格默认为 0 和空数组，数据来源必须依靠合约拉取
+  // 🚀 核心数据状态：绝对纯净，0 兜底，0 假数据！
   const [userPoints, setUserPoints] = useState(0); 
   const [earnHistory, setEarnHistory] = useState<any[]>([]); 
   const [redemptionHistory, setRedemptionHistory] = useState<any[]>([]);
+  const [recommendations, setRecommendations] = useState<Course[]>([]);
+  
+  // 顶级特性数据源
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [globalActivities, setGlobalActivities] = useState<any[]>([]);
+  const [sbtBadges, setSbtBadges] = useState<any[]>([]);
 
-  const [recommendations, setRecommendations] = useState<Course[]>([])
   const [loading, setLoading] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('全部') 
+  const [isConnecting, setIsConnecting] = useState(false);
   
   // 答题与课程状态
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
-  const [timeLeft, setTimeLeft] = useState(0)
   const [answers, setAnswers] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isViewingVideo, setIsViewingVideo] = useState(true) 
   const [isMinting, setIsMinting] = useState(false)
 
-  // 炫酷任务下拉框控制状态
-  const [isTasksExpanded, setIsTasksExpanded] = useState(false);
+  // UI 交互状态
+  const [showNotifications, setShowNotifications] = useState(false); 
+  const [hasUnread, setHasUnread] = useState(true); 
+  const [chartView, setChartView] = useState<'week' | 'month'>('week'); 
+
+  // 👤 自定义头像逻辑
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [customAvatar, setCustomAvatar] = useState<string>(() => {
+    return localStorage.getItem('userAvatar') || "https://github.com/shadcn.png";
+  });
+
+  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setCustomAvatar(base64String);
+        localStorage.setItem('userAvatar', base64String);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleEnterCourse = (course: Course) => {
+    setSelectedCourse(course);
+    setIsViewingVideo(true);
+    setAnswers(new Array(course.questions?.length || 0).fill(""));
+  };
 
   // ==========================================
-  // 🔌 [接口对接预留]: 唯一真理来源 —— 智能合约与后端API
+  // 🔌 [波卡链上数据枢纽]: 智能合约与链下节点同步中心
   // ==========================================
   const syncDataFromRemote = async (address: string) => {
     try {
-      // 1. 获取链上真实积分余额
-      // TODO: const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ABI, provider);
-      // TODO: const balance = await contract.balanceOf(address);
-      // TODO: setUserPoints(Number(balance));
-
-      // 2. 获取用户学习与兑换的历史日志 (Event Logs / 后端记录)
-      // TODO: const historyRes = await axios.get(`/api/user/${address}/history`);
-      // TODO: setEarnHistory(historyRes.data.earnHistory);
-      // TODO: setRedemptionHistory(historyRes.data.redemptionHistory);
+      console.log(`📡 准备向预言机与波卡节点 ${WS_PROVIDER_URL} 请求数据...`);
       
-      console.log(`📡 准备向合约地址 ${NFT_CONTRACT_ADDRESS} 拉取 ${address} 的链上数据...`);
+      if (CONTRACT_ADDRESS) {
+        const provider = new WsProvider(WS_PROVIDER_URL);
+        const api = await ApiPromise.create({ provider });
+        const contract = new ContractPromise(api, NFT_CONTRACT_ABI, CONTRACT_ADDRESS);
+
+        const { result, output } = await contract.query.get_user_status(
+          address, 
+          { gasLimit: api?.registry.createType('WeightV2', { refTime: 5000000000, proofSize: 1000000 }) }, 
+          address
+        );
+
+        if (result.isOk && output) {
+           const userData: any = output.toJSON();
+           if (userData && userData.ok) {
+             setUserPoints(userData.ok.total_points || 0);
+           }
+        }
+      }
+
+      setHasUnread(true);
     } catch (err) {
-      console.warn("❌ 数据拉取失败，请检查合约节点状态");
+      console.warn("❌ 节点数据拉取失败，处于离线静默状态", err);
     }
   };
 
@@ -89,34 +125,51 @@ function App() {
     if (userAddress) syncDataFromRemote(userAddress);
   }, [userAddress]);
 
-  // 📈 逻辑函数：生成【近一周（7天）】固定折线图数据
-  const getDynamicChartData = () => {
+  // 📈 图表数据计算
+  const getWeeklyData = () => {
     const data = [];
     let cumulative = 0;
-
-    // 为了确保每天都有坐标轴（哪怕没学习），生成过去 7 天的连续日期数组
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
       
-      // 过滤出这特定的“这一天”用户看了多少视频赚了多少积分
       const dailyPoints = earnHistory
         .filter((item: any) => new Date(item.createdAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) === dateStr)
         .reduce((sum: number, item: any) => sum + item.reward, 0);
       
-      // 累加到趋势线中（没看视频就是平的，看了就会上涨）
       cumulative += dailyPoints;
-      
-      // 给最后一天的名字换成“今日”更直观
       data.push({ name: i === 0 ? '今日' : dateStr, points: cumulative });
     }
-    
     return data;
   };
 
-  // ✅ 逻辑函数：验证今日任务完成情况 (依赖 earnHistory 进行验证)
-  const checkDailyTasks = () => {
+  const getMonthlyData = () => {
+    const weeks = [0, 0, 0, 0];
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    earnHistory.forEach((item: any) => {
+      const d = new Date(item.createdAt);
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        const day = d.getDate();
+        if (day <= 7) weeks[0] += item.reward;
+        else if (day <= 14) weeks[1] += item.reward;
+        else if (day <= 21) weeks[2] += item.reward;
+        else weeks[3] += item.reward;
+      }
+    });
+
+    return [
+      { name: '第一周', points: weeks[0] },
+      { name: '第二周', points: weeks[1] },
+      { name: '第三周', points: weeks[2] },
+      { name: '第四周', points: weeks[3] },
+    ];
+  };
+
+  const checkAllTasks = () => {
     const today = new Date().toLocaleDateString();
     const todaysLessons = earnHistory.filter((h: any) => new Date(h.createdAt).toLocaleDateString() === today);
     const todaysRedeems = redemptionHistory.filter((r: any) => new Date(r.createdAt).toLocaleDateString() === today);
@@ -125,41 +178,92 @@ function App() {
       { id: 1, label: '观看课程视频', reward: 5, completed: todaysLessons.length >= 1, target: 1, current: todaysLessons.length },
       { id: 2, label: '得到一次奖励', reward: 10, completed: todaysLessons.length >= 1, target: 1, current: todaysLessons.length >= 1 ? 1 : 0 },
       { id: 3, label: '观看 5 个视频', reward: 20, completed: todaysLessons.length >= 5, target: 5, current: todaysLessons.length },
-      { id: 4, label: '在积分商城完成 1 次权益兑换', reward: 15, completed: todaysRedeems.length >= 1, target: 1, current: todaysRedeems.length },
+      { id: 4, label: '在商城完成 1 次兑换', reward: 15, completed: todaysRedeems.length >= 1, target: 1, current: todaysRedeems.length },
       { id: 5, label: '连续学习打卡 3 天', reward: 50, completed: false, target: 3, current: 1 },
-      { id: 6, label: '分享专属邀请链接', reward: 10, completed: false, target: 1, current: 0 }
+      { id: 6, label: '分享专属邀请链接', reward: 30, completed: false, target: 1, current: 0 }
     ];
   };
 
-  // 获取计算好的任务，并根据折叠状态进行切割
-  const allTasks = checkDailyTasks();
-  const visibleTasks = isTasksExpanded ? allTasks : allTasks.slice(0, 3);
+  const allTasks = checkAllTasks();
+  const homePreviewTasks = allTasks.slice(0, 3);
+  
+  const calculateDailyCompletionRate = () => {
+    const dailyTasks = allTasks.slice(0, 4); 
+    const completedCount = dailyTasks.filter(t => t.completed).length;
+    return Math.round((completedCount / dailyTasks.length) * 100) + '%';
+  };
 
-  // 🦊 连接钱包 (剔除所有本地假数据兜底)
+  const renderCalendar = () => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    const activeDays = new Set(
+      earnHistory.map((h: any) => {
+        const d = new Date(h.createdAt);
+        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) return d.getDate();
+        return null;
+      }).filter(Boolean)
+    );
+
+    const days = [];
+    for (let i = 1; i <= daysInMonth; i++) {
+      const isActive = activeDays.has(i);
+      const isToday = i === today.getDate();
+      days.push(
+        <div 
+          key={i} 
+          className={`flex items-center justify-center h-8 rounded-lg text-xs font-black transition-all duration-300 ${
+            isActive 
+              ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.6)]' 
+              : isToday 
+                ? 'border-2 border-purple-500 text-purple-400' 
+                : 'bg-white/5 text-gray-600 hover:bg-white/10'
+          }`}
+        >
+          {i}
+        </div>
+      );
+    }
+    return (
+      <div className="grid grid-cols-7 gap-2 mt-4">
+        {['日', '一', '二', '三', '四', '五', '六'].map(d => (
+          <div key={d} className="text-center text-[10px] text-gray-500 font-bold mb-2">{d}</div>
+        ))}
+        {days}
+      </div>
+    );
+  };
+
+  // 🦊 唤起波卡钱包 (Polkadot.js / Subwallet)
   const connectWallet = async () => {
-    if (typeof (window as any).ethereum !== 'undefined') {
-      try {
-        setIsConnecting(true);
-        const provider = new ethers.BrowserProvider((window as any).ethereum);
-        const accounts = await provider.send("eth_requestAccounts", []);
-        setUserAddress(accounts[0]);
-        // 这里绝对不再做 setUserPoints(200) 的兜底。一切交给 useEffect 中的 syncDataFromRemote。
-      } catch (error: any) {
+    try {
+      setIsConnecting(true);
+      const extensions = await web3Enable('SkillNet Web3');
+      if (extensions.length === 0) {
+        alert('🦊 请先安装 Polkadot.js 或 Subwallet 插件钱包！');
         setIsConnecting(false);
-      } finally { setIsConnecting(false); }
-    } else {
-      alert("🦊 请先安装 MetaMask 插件！");
+        return;
+      }
+      const allAccounts = await web3Accounts();
+      if (allAccounts.length > 0) {
+        setUserAddress(allAccounts[0].address);
+      } else {
+        alert('⚠️ 未找到钱包账户，请在波卡插件中创建或导入账户。');
+      }
+    } catch (error) {
+      console.error("波卡钱包连接失败", error);
+    } finally {
+      setIsConnecting(false);
     }
   };
 
-  // 🤖 [接口对接预留]: 模块5 AI 推荐接口
   useEffect(() => {
     const fetchCoursesFromAI = async () => {
       setLoading(true);
       try {
-        // TODO: const response = await axios.post('/ai-api/api/recommend', { userAddress });
-        // 严格遵照：不写假数据兜底，没有接口就直接抛错为空
-        throw new Error("AI 接口未接入"); 
+        throw new Error("AI 接口待接入"); 
       } catch (error) {
         setRecommendations([]);
       } finally { setLoading(false); }
@@ -167,48 +271,71 @@ function App() {
     fetchCoursesFromAI();
   }, [userAddress]);
 
-  // 🚀 提交试卷逻辑：对接 AI 预言机并请求上链签名
   const handleSubmit = async () => {
-    if (!userAddress) return alert("⚠️ 请先连接钱包！");
+    if (!userAddress) return alert("⚠️ 请先连接波卡钱包！");
+    if (!CONTRACT_ADDRESS) return alert("⏳ 等待智能合约节点地址部署！");
     setIsSubmitting(true);
     
-    // 🔌 [接口对接预留]: 实际应向后台发请求获取验证签名
-    // TODO: const verifyRes = await axios.post('/ai-api/api/verify', { answers });
-    // TODO: if(verifyRes.data.success) { await contract.claimPoints(verifyRes.data.signature); }
-    
-    setTimeout(() => {
+    try {
+      const verifyRes = await axios.post('https://some-bees-hope.loca.lt/api/validate', 
+        { 
+          userAddress: userAddress,
+          courseId: selectedCourse?.id,
+          answers: answers 
+        }, 
+        { headers: { 'bypass-tunnel-reminder': 'true' } }
+      );
+
+      if(verifyRes.data && verifyRes.data.success !== false) {
+         const expectedHash = verifyRes.data.expected_hash; 
+         const courseId = selectedCourse?.id || 1;
+         const score = 100; 
+         const correctRate = 100; 
+         const difficulty = selectedCourse?.difficulty || 1;
+
+         const provider = new WsProvider(WS_PROVIDER_URL);
+         const api = await ApiPromise.create({ provider });
+         const contract = new ContractPromise(api, NFT_CONTRACT_ABI, CONTRACT_ADDRESS);
+         
+         const injector = await web3FromAddress(userAddress);
+         
+         const tx = contract.tx.completeCourse(
+            { gasLimit: api.registry.createType('WeightV2', { refTime: 5000000000, proofSize: 1000000 }) }, 
+            courseId, score, correctRate, difficulty, expectedHash
+         );
+
+         await tx.signAndSend(userAddress, { signer: injector.signer }, ({ status }) => {
+            if (status.isInBlock) {
+               console.log(`✅ 交易打包进区块: ${status.asInBlock.toHex()}`);
+               
+               const reward = selectedCourse?.baseReward || 20;
+               setUserPoints(prev => prev + reward);
+               setEarnHistory(prev => [
+                 { title: selectedCourse?.title, reward: reward, createdAt: new Date().toISOString() },
+                 ...prev
+               ]);
+               setSelectedCourse(null);
+               setIsSubmitting(false);
+               alert(`🎉 恭喜！智能合约已验证通过，成绩上链并为您发放 ${reward} 积分！`);
+            }
+         });
+      } else {
+         alert("❌ AI 验证未通过，检测到异常作答！");
+         setIsSubmitting(false);
+      }
+    } catch (error) {
+      console.error("链上交互或 AI 节点失败:", error);
+      alert("❌ 无法连接到验证节点或合约网络，请检查是否启动了本地节点。");
       setIsSubmitting(false);
-      const reward = selectedCourse?.baseReward || 20;
-      
-      // ⚠️ 注释：在有后端的情况下，这里应当重新调用 syncDataFromRemote 拉取最新余额。
-      // 目前为了能让你在开发环境看到交互变化，使用 React 乐观更新 UI。
-      setUserPoints(prev => prev + reward);
-      setEarnHistory(prev => [
-        { title: selectedCourse?.title, reward: reward, createdAt: new Date().toISOString() },
-        ...prev
-      ]);
-      
-      setSelectedCourse(null);
-      alert(`🎉 AI 判卷完成！智能合约已为您发放 ${reward} 积分`);
-    }, 1500);
+    }
   };
 
-  // ⛓️ [接口对接预留]: 模块1 合约兑换接口
   const handleRedeem = async (item: typeof mallItems[0]) => {
     if (userPoints >= item.points) {
-      if (window.confirm(`确定花费 ${item.points} 积分兑换【${item.name}】吗？\n将唤起 MetaMask 发起区块链交易！`)) {
+      if (window.confirm(`确定花费 ${item.points} 积分兑换【${item.name}】吗？`)) {
         setIsMinting(true);
-        
-        // 🔌 [接口对接预留]: 唤起合约真实 mint 函数
-        // TODO: const provider = new ethers.BrowserProvider((window as any).ethereum);
-        // TODO: const signer = await provider.getSigner();
-        // TODO: const contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ABI, signer);
-        // TODO: const tx = await contract.mintBadge(userAddress, String(item.id));
-        // TODO: await tx.wait();
-        
         setTimeout(() => {
           setIsMinting(false);
-          // ⚠️ 注释：实际应当等待 tx.wait() 后重新 syncDataFromRemote
           setUserPoints(prev => prev - item.points);
           setRedemptionHistory(prev => [
             { itemName: item.name, cost: item.points, createdAt: new Date().toISOString() },
@@ -222,230 +349,483 @@ function App() {
 
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString();
 
-  const filteredCourses = recommendations.filter((course: Course) => {
-    const matchSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchCategory = selectedCategory === '全部' || course.title.includes(selectedCategory);
-    return matchSearch && matchCategory;
-  });
-
   return (
-    <div className="flex h-screen bg-[#09090b] text-white font-sans overflow-hidden">
+    <div className="flex h-screen bg-[#07080e] text-white font-sans overflow-hidden">
       
-      {/* 📌 侧边栏 */}
-      <aside className="w-64 bg-[#0F111A] border-r border-white/5 flex flex-col z-20">
+      <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
+        }
+        .animate-marquee { animation: marquee 25s linear infinite; }
+      `}</style>
+
+      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleAvatarUpload} className="hidden" />
+
+      <aside className="w-64 bg-[#0B0D14] border-r border-white/5 flex flex-col z-20 shadow-[10px_0_30px_rgba(0,0,0,0.5)] relative">
         <div className="p-8 flex items-center gap-3">
-          <img src={logoImg} alt="Logo" className="w-8 h-8 rounded-lg" />
-          <span className="text-2xl font-black tracking-tight">SkillNet</span>
+          <div className="relative">
+             <div className="absolute inset-0 bg-purple-500 blur-md opacity-50"></div>
+             <img src="/images/logo.png" alt="Logo" className="relative w-8 h-8 rounded-lg object-contain" />
+          </div>
+          <span className="text-2xl font-black tracking-tight text-white">SkillNet</span>
         </div>
         
-        <nav className="flex-1 px-4">
-          <button onClick={() => setActiveTab('home')} className={`w-full flex items-center gap-3 px-6 py-4 mb-2 rounded-xl transition-all ${activeTab === 'home' ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' : 'text-gray-500 hover:text-white'}`}>
-            <Home size={20} /> <span className="font-bold">仪表盘</span>
-          </button>
-          <button onClick={() => setActiveTab('library')} className={`w-full flex items-center gap-3 px-6 py-4 mb-2 rounded-xl transition-all ${activeTab === 'library' ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' : 'text-gray-500 hover:text-white'}`}>
-            <BookOpen size={20} /> <span className="font-bold">探索课程</span>
-          </button>
-          <button onClick={() => setActiveTab('mall')} className={`w-full flex items-center gap-3 px-6 py-4 mb-2 rounded-xl transition-all ${activeTab === 'mall' ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' : 'text-gray-500 hover:text-white'}`}>
-            <ShoppingBag size={20} /> <span className="font-bold">积分商城</span>
-          </button>
-          <button onClick={() => setActiveTab('profile')} className={`w-full flex items-center gap-3 px-6 py-4 mb-2 rounded-xl transition-all ${activeTab === 'profile' ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' : 'text-gray-500 hover:text-white'}`}>
-            <User size={20} /> <span className="font-bold">个人中心</span>
-          </button>
+        <nav className="flex-1 px-3 space-y-1 mt-4">
+          {[
+            { id: 'home', icon: Home, label: '首页' },
+            { id: 'library', icon: BookOpen, label: '探索课程' },
+            { id: 'tasks', icon: Target, label: '任务中心' },
+            { id: 'mall', icon: ShoppingBag, label: '积分商城' },
+            { id: 'profile', icon: User, label: '个人中心' }
+          ].map((item) => {
+            const isActive = activeTab === item.id;
+            const Icon = item.icon;
+            return (
+              <button 
+                key={item.id}
+                onClick={() => setActiveTab(item.id as any)} 
+                className={`w-full group flex items-center gap-3 px-5 py-4 rounded-xl transition-all duration-300 relative overflow-hidden ${
+                  isActive ? 'text-white bg-white/5 shadow-inner' : 'text-gray-500 hover:text-gray-200 hover:bg-white/5'
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-purple-500 rounded-r-full shadow-[0_0_10px_#a855f7]"></div>
+                )}
+                <Icon size={20} className={`relative z-10 transition-transform duration-300 ${isActive ? 'text-purple-400' : 'group-hover:scale-110'}`} /> 
+                <span className={`relative z-10 font-bold tracking-wide ${isActive ? 'text-white' : ''}`}>{item.label}</span>
+              </button>
+            )
+          })}
         </nav>
-
-        <div className="p-8">
-          <button onClick={connectWallet} className="w-full bg-[#1A1D27] border border-white/10 text-sm font-bold py-3 rounded-xl hover:bg-white/5 transition-colors">
-            {userAddress ? `${userAddress.substring(0, 6)}...${userAddress.substring(38)}` : '🔌 连接钱包'}
-          </button>
-        </div>
       </aside>
 
-      {/* 📌 主内容区 */}
-      <main className="flex-1 flex flex-col relative overflow-hidden bg-[#09090b]">
+      <main className="flex-1 flex flex-col relative overflow-hidden bg-[#07080e]">
         
-        <header className="h-20 px-10 flex items-center justify-end gap-6 z-10">
-          <div className="flex items-center gap-2 bg-purple-500/10 border border-purple-500/20 px-4 py-1.5 rounded-full">
-            <span className="text-xs font-bold text-purple-400">NETWORK: SEPOLIA</span>
+        <div className="absolute top-8 right-10 flex items-center gap-4 z-50 pointer-events-auto">
+          <div className="relative">
+             <button 
+                onClick={() => setShowNotifications(!showNotifications)} 
+                className="relative text-gray-300 hover:text-white transition-all p-2.5 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 shadow-lg"
+             >
+               <Bell size={18} />
+               {userAddress && hasUnread && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#12131A]"></span>}
+             </button>
+             
+             {showNotifications && (
+               <div className="absolute right-0 mt-3 w-80 bg-[#1A1D27] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                 <div className="px-4 py-3 border-b border-white/5 flex justify-between items-center bg-white/5">
+                   <span className="text-sm font-bold text-white">系统通知</span>
+                   <span 
+                     className="text-xs text-purple-400 cursor-pointer hover:text-purple-300 transition-colors"
+                     onClick={() => setHasUnread(false)}
+                   >
+                     全部已读
+                   </span>
+                 </div>
+                 <div className="p-2 space-y-1">
+                   {userAddress ? (
+                     <div className="px-4 py-3 hover:bg-white/5 rounded-xl cursor-pointer transition-colors">
+                       <p className="text-sm font-bold text-white mb-1 flex items-center gap-2"><CheckCircle2 size={14} className="text-green-400"/> 波卡钱包连接成功</p>
+                       <p className="text-xs text-gray-500">欢迎来到 SkillNet，您的链上旅程已开启。</p>
+                     </div>
+                   ) : (
+                     <div className="px-4 py-8 text-center text-gray-500 text-sm">暂无新通知，请先连接波卡钱包。</div>
+                   )}
+                 </div>
+               </div>
+             )}
           </div>
-          <Bell className="text-gray-500 cursor-pointer hover:text-white" size={20} />
-          <div className="w-px h-6 bg-gray-800"></div>
-          <Avatar className="w-10 h-10 border border-purple-500/50">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>SN</AvatarFallback>
-          </Avatar>
-        </header>
+        </div>
 
-        <div className="flex-1 overflow-y-auto p-10 hide-scrollbar">
+        <div className="flex-1 overflow-y-auto p-10 hide-scrollbar scroll-smooth relative z-0 mt-8">
           
           {activeTab === 'home' && (
-            <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 relative mt-4">
               
-              {/* ================= 上排：总积分与任务 ================= */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                {/* 1. 总积分卡片 */}
-                <div className="lg:col-span-2 bg-gradient-to-br from-[#1A1D27] to-[#0F111A] border border-white/5 rounded-[2.5rem] p-10 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-[100px] group-hover:bg-purple-600/20 transition-all duration-700"></div>
-                  <div>
-                    <h2 className="text-gray-500 font-bold mb-2">链上积分余额</h2>
-                    <div className="flex items-baseline gap-3">
-                      <span className="text-7xl font-black tracking-tighter text-white">{userPoints}</span>
-                      <span className="text-xl font-bold text-purple-400 uppercase tracking-widest">Points</span>
+              <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-full max-w-3xl z-40 group [perspective:1000px] pointer-events-none">
+                 <div className="flex items-center h-10 bg-black/40 backdrop-blur-xl border-t border-purple-500/30 border-b border-white/5 rounded-xl shadow-[0_15px_40px_rgba(168,85,247,0.15)] transition-all duration-700 ease-out [transform:rotateX(-20deg)_translateY(-10px)] group-hover:[transform:rotateX(0deg)_translateY(0deg)] pointer-events-auto overflow-hidden">
+                    <div className="bg-purple-900/30 h-full px-4 flex items-center gap-2 border-r border-purple-500/20 shrink-0">
+                      <Radio size={14} className="text-purple-400 animate-pulse" />
+                      <span className="text-xs font-black tracking-widest text-purple-300">实时播报</span>
                     </div>
-                    <p className="text-gray-500 mt-6 max-w-sm leading-relaxed">
-                      系统已接入智能合约。您的所有积分余额及获取记录均通过区块链实时拉取验证，确保证明不可篡改。
-                    </p>
+                    <div className="flex-1 relative flex items-center h-full">
+                       {globalActivities.length > 0 ? (
+                          <div className="animate-marquee whitespace-nowrap flex gap-12 items-center px-4 h-full">
+                             {globalActivities.map((act, i) => (
+                                <span key={i} className="text-[13px] font-mono text-gray-300 flex items-center gap-2">
+                                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                   <span className="text-purple-400">{act.address}</span> 
+                                   <span className="text-gray-400">{act.action}</span>
+                                   <span className="text-green-400 font-bold drop-shadow-[0_0_5px_rgba(74,222,128,0.4)]">+{act.points} 积分</span>
+                                </span>
+                             ))}
+                          </div>
+                       ) : (
+                          <div className="w-full text-center text-[12px] text-gray-500 font-mono tracking-widest">
+                             [ 📡 预言机状态：静默。等待链下节点推送全网事件... ]
+                          </div>
+                       )}
+                    </div>
+                 </div>
+              </div>
+
+              <div className="bg-[#0F111A] rounded-[2.5rem] border border-white/5 relative shadow-2xl mb-12 mt-6 group [perspective:1000px]">
+                <div className="transition-all duration-700 ease-out group-hover:shadow-[0_0_40px_rgba(168,85,247,0.1)]">
+                  <div className="h-64 w-full rounded-t-[2.5rem] relative overflow-hidden bg-[#07080e]">
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/4 w-[500px] h-[500px] bg-gradient-to-tr from-purple-900 via-blue-900 to-[#07080e] rounded-full blur-[2px] shadow-[0_0_150px_rgba(168,85,247,0.4)]"></div>
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/4 w-[480px] h-[480px] bg-[#07080e] rounded-full"></div>
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[40%] w-[300px] h-[300px] bg-gradient-to-b from-purple-500/20 to-transparent rounded-full blur-2xl"></div>
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/5 via-transparent to-transparent opacity-50"></div>
+                  </div>
+
+                  <div className="absolute top-64 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
+                      <div 
+                        className="w-24 h-24 rounded-2xl bg-[#09090b] p-1.5 shadow-[0_10px_40px_rgba(0,0,0,0.8)] border border-white/10 cursor-pointer relative" 
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                          <Avatar className="w-full h-full rounded-xl hover:scale-105 transition-transform duration-300">
+                            <AvatarImage src={customAvatar} className="object-cover" />
+                            <AvatarFallback>User</AvatarFallback>
+                          </Avatar>
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl opacity-0 hover:opacity-100 transition-opacity">
+                             <Camera size={24} className="text-white" />
+                          </div>
+                      </div>
+                      <p className="mt-4 font-black text-xl text-white drop-shadow-md flex items-center gap-2">
+                          {userAddress ? `${userAddress.substring(0,6)}...${userAddress.substring(userAddress.length - 4)}` : '未连接极客'}
+                          {userAddress && <CheckCircle2 size={16} className="text-blue-400" />}
+                      </p>
+                  </div>
+
+                  <div className="pt-24 pb-10 px-6 sm:px-12 grid grid-cols-2 md:grid-cols-4 gap-6 divide-x divide-white/5 text-center items-center">
+                      <div>
+                         <p className="text-gray-500 text-xs font-mono mb-2 uppercase tracking-widest">总积分</p>
+                         <p className="text-3xl font-black text-white">{userPoints}</p>
+                      </div>
+                      <div>
+                         <p className="text-gray-500 text-xs font-mono mb-2 uppercase tracking-widest">今日任务完成率</p>
+                         <p className="text-3xl font-black text-white">{calculateDailyCompletionRate()}</p>
+                      </div>
+                      <div>
+                         <p className="text-gray-500 text-xs font-mono mb-2 uppercase tracking-widest">活跃日</p>
+                         <p className="text-3xl font-black text-white">
+                           {new Set(earnHistory.map(h => new Date(h.createdAt).toLocaleDateString())).size}
+                         </p>
+                      </div>
+                      
+                      <div className="flex flex-col items-center justify-center">
+                         <button 
+                           onClick={connectWallet} 
+                           className={`relative group outline-none ${!userAddress ? 'animate-pulse' : ''} hover:animate-none transition-all duration-300`}
+                         >
+                           <div className="absolute inset-0 bg-gradient-to-b from-purple-500 to-blue-600 rounded-xl blur opacity-60 group-hover:opacity-100 transition-opacity duration-300"></div>
+                           <div className="relative px-6 py-3 bg-gradient-to-b from-[#1C1F2E] to-[#12141E] border-t border-white/20 border-b border-black/80 rounded-xl shadow-[0_8px_16px_rgba(0,0,0,0.6)] group-hover:-translate-y-1 group-hover:shadow-[0_15px_30px_rgba(168,85,247,0.4)] transition-all duration-300 flex items-center gap-3">
+                             {userAddress ? (
+                               <><div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]"></div><span className="font-bold text-white text-sm">已连接节点</span></>
+                             ) : (
+                               <><Zap size={18} className="text-purple-400 group-hover:text-white transition-colors" /><span className="font-bold text-white text-sm drop-shadow-md">连接 Web3 钱包</span></>
+                             )}
+                           </div>
+                         </button>
+                      </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                
+                <div className="group [perspective:1000px] h-[340px]">
+                  <div className="w-full h-full bg-gradient-to-bl from-[#12141F] to-[#0A0C12] border border-white/10 rounded-[2rem] p-6 shadow-[15px_15px_30px_rgba(0,0,0,0.5)] flex flex-col transition-all duration-500 ease-out [transform:rotateX(15deg)_rotateY(15deg)] group-hover:[transform:rotateX(0deg)_rotateY(0deg)_scale(1.02)] relative z-10">
+                    <div className="flex items-center justify-between mb-6 shrink-0">
+                       <h3 className="font-bold text-white flex items-center gap-2"><User size={16} className="text-purple-400"/> 今日任务</h3>
+                    </div>
+                    <div className="space-y-4 flex-1 overflow-hidden">
+                      {homePreviewTasks.map((task: any) => (
+                        <div key={task.id} className="relative">
+                          <div className="flex justify-between text-xs font-bold text-gray-300 mb-2">
+                             <span>{task.label}</span>
+                             <span className="text-purple-400">+{task.reward} 积分</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden">
+                             <div className={`h-full transition-all duration-1000 ${task.completed ? 'bg-green-500' : 'bg-gradient-to-r from-purple-500 to-blue-500'}`} style={{ width: `${Math.min((task.current / task.target) * 100, 100)}%` }}></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setActiveTab('tasks')} className="w-full mt-6 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm py-3 rounded-xl transition-all shadow-lg shadow-purple-600/20 shrink-0 relative z-20 pointer-events-auto">
+                      前往任务中心
+                    </button>
                   </div>
                 </div>
 
-                {/* 2. 今日任务进度 (实时刷新 + 下拉隐藏) */}
-                <div className="bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl flex flex-col relative">
-                  <h3 className="text-lg font-bold mb-6 flex justify-between items-center shrink-0">
-                    今日挑战任务
-                    <span className="text-xs text-gray-500 font-mono">每日 00:00 重置</span>
+                <div className="lg:col-span-2 group [perspective:1000px] h-[340px]">
+                  <div className="w-full h-full bg-[#0F111A] border border-white/5 rounded-[2rem] p-6 flex flex-col transition-all duration-500 ease-out group-hover:scale-[1.03] group-hover:shadow-[0_0_50px_rgba(168,85,247,0.2)] group-hover:border-purple-500/30 relative z-20">
+                    <div className="flex justify-between items-center mb-6 shrink-0 relative z-30">
+                      <h3 className="font-bold text-white flex items-center gap-2"><TrendingUp size={16} className="text-purple-400"/> 学习积分趋势</h3>
+                      <div className="flex gap-2">
+                        <span onClick={() => setChartView('week')} className={`text-xs px-3 py-1 rounded cursor-pointer transition-colors ${chartView === 'week' ? 'bg-white/10 text-white' : 'text-gray-600 hover:text-gray-400'}`}>本周</span>
+                        <span onClick={() => setChartView('month')} className={`text-xs px-3 py-1 rounded cursor-pointer transition-colors ${chartView === 'month' ? 'bg-white/10 text-white' : 'text-gray-600 hover:text-gray-400'}`}>全部(全月)</span>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-3 mb-4 shrink-0">
+                       <span className="text-3xl font-black">{userPoints}</span>
+                       <span className="text-sm font-bold text-gray-500">积分</span>
+                    </div>
+                    <div className="flex-1 w-full min-h-0 pointer-events-none group-hover:pointer-events-auto">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {chartView === 'week' ? (
+                          <AreaChart data={getWeeklyData()}>
+                            <defs>
+                              <linearGradient id="colorPoints" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#ec4899" stopOpacity={0.6}/>
+                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                              </linearGradient>
+                              <linearGradient id="lineColor" x1="0" y1="0" x2="1" y2="0">
+                                 <stop offset="0%" stopColor="#3b82f6"/>
+                                 <stop offset="50%" stopColor="#a855f7"/>
+                                 <stop offset="100%" stopColor="#ec4899"/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                            <XAxis dataKey="name" stroke="#3f3f46" fontSize={12} tickLine={false} axisLine={false} />
+                            <YAxis domain={[0, 500]} stroke="#3f3f46" fontSize={12} tickLine={false} axisLine={false} allowDataOverflow={true} />
+                            <Tooltip contentStyle={{ backgroundColor: '#0F111A', border: '1px solid #ffffff10', borderRadius: '12px' }} />
+                            <Area type="monotone" dataKey="points" stroke="url(#lineColor)" strokeWidth={4} fillOpacity={1} fill="url(#colorPoints)" />
+                          </AreaChart>
+                        ) : (
+                          <BarChart data={getMonthlyData()}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                            <XAxis dataKey="name" stroke="#3f3f46" fontSize={12} tickLine={false} axisLine={false} />
+                            <YAxis domain={[0, 5000]} stroke="#3f3f46" fontSize={12} tickLine={false} axisLine={false} allowDataOverflow={true} />
+                            <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0F111A', border: '1px solid #ffffff10', borderRadius: '12px' }} />
+                            <Bar dataKey="points" fill="#a855f7" radius={[6, 6, 0, 0]} barSize={40} />
+                          </BarChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="group [perspective:1000px] h-[340px]">
+                  <div className="w-full h-full bg-gradient-to-br from-[#12141F] to-[#0A0C12] border border-white/10 rounded-[2rem] p-6 shadow-[-15px_15px_30px_rgba(0,0,0,0.5)] flex flex-col transition-all duration-500 ease-out [transform:rotateX(15deg)_rotateY(-15deg)] group-hover:[transform:rotateX(0deg)_rotateY(0deg)_scale(1.02)]">
+                    <div className="flex justify-between items-center mb-6 shrink-0">
+                      <h3 className="font-bold text-white flex items-center gap-2"><CalendarDays size={16} className="text-blue-400"/> 学习日历</h3>
+                      <span className="text-[10px] text-gray-500 border border-white/10 px-2 py-0.5 rounded">本月</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 mb-2 shrink-0">
+                       <span className="text-2xl font-black text-white">{earnHistory.length}</span>
+                       <span className="text-xs font-bold text-gray-500">累计学习次数</span>
+                    </div>
+                    <div className="flex-1 overflow-hidden mt-2">
+                       {renderCalendar()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                 
+                 <div className="lg:col-span-1 group [perspective:1000px] h-[380px]">
+                   <div className="w-full h-full bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-8 shadow-[15px_15px_30px_rgba(0,0,0,0.5)] flex flex-col transition-all duration-500 ease-out [transform:rotateX(15deg)_rotateY(15deg)] group-hover:[transform:rotateX(0deg)_rotateY(0deg)_scale(1.02)]">
+                      <div className="flex justify-between items-center mb-6 shrink-0">
+                         <h3 className="font-bold text-white flex items-center gap-2"><Trophy size={18} className="text-yellow-500"/> 全局极客榜</h3>
+                         <span className="text-xs bg-white/5 text-gray-400 px-2 py-1 rounded">前 5 名</span>
+                      </div>
+                      <div className="space-y-4 flex-1 overflow-y-auto hide-scrollbar">
+                         {leaderboard.length > 0 ? (
+                           leaderboard.map((user, idx) => (
+                             <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:border-purple-500/30 transition-colors">
+                               <div className="flex items-center gap-3">
+                                 <span className={`font-black text-lg w-6 ${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-orange-400' : 'text-gray-600'}`}>#{idx + 1}</span>
+                                 <span className="font-mono text-sm text-gray-200">{user.address}</span>
+                               </div>
+                               <span className="text-purple-400 font-bold text-sm">{user.points} 积分</span>
+                             </div>
+                           ))
+                         ) : (
+                           <div className="h-full flex flex-col items-center justify-center py-10 text-gray-500 text-sm border border-dashed border-gray-800 rounded-2xl bg-white/5">
+                              <Trophy size={32} className="mb-3 opacity-30 text-gray-600 animate-pulse" />
+                              <p>等待智能合约同步全网排名...</p>
+                           </div>
+                         )}
+                      </div>
+                   </div>
+                 </div>
+
+                 <div className="lg:col-span-2 group [perspective:1000px] h-[380px]">
+                   <div className="w-full h-full bg-gradient-to-br from-[#12141F] to-[#0A0C12] border border-white/10 rounded-[2.5rem] p-8 shadow-[-15px_15px_30px_rgba(0,0,0,0.5)] flex flex-col transition-all duration-500 ease-out [transform:rotateX(15deg)_rotateY(-15deg)] group-hover:[transform:rotateX(0deg)_rotateY(0deg)_scale(1.02)] relative overflow-hidden">
+                      <div className="flex justify-between items-center mb-6 shrink-0 relative z-10">
+                        <h3 className="font-bold text-white flex items-center gap-2"><Zap size={18} className="text-purple-400"/> 极客链上能量阵</h3>
+                        <span className="text-xs bg-white/5 text-gray-400 px-2 py-1 rounded border border-white/5">预言机同步中</span>
+                      </div>
+                      
+                      <div className="flex-1 flex items-center justify-center relative">
+                         <div className="absolute w-48 h-48 border-[2px] border-purple-500/40 rounded-full animate-[spin_4s_linear_infinite] [transform:rotateX(70deg)] shadow-[0_0_20px_rgba(168,85,247,0.3)]"></div>
+                         <div className="absolute w-64 h-64 border-[2px] border-blue-500/30 rounded-full animate-[spin_7s_linear_infinite_reverse] [transform:rotateX(70deg)_rotateY(20deg)] shadow-[0_0_20px_rgba(59,130,246,0.3)]"></div>
+                         <div className="absolute w-32 h-32 bg-gradient-to-t from-purple-600/30 to-blue-500/30 blur-2xl rounded-full animate-pulse"></div>
+                         
+                         <div className="relative z-10 flex flex-col items-center">
+                            <Sparkles size={28} className="text-purple-400 mb-2 drop-shadow-[0_0_10px_rgba(168,85,247,1)]" />
+                            <p className="text-4xl font-black text-white tracking-widest drop-shadow-md">
+                               {userPoints > 0 ? userPoints : 'AWAITING'}
+                            </p>
+                            <p className="text-xs text-gray-400 font-mono mt-2 tracking-widest">
+                               {userPoints > 0 ? 'CURRENT POWER' : 'ORACLE SYNC'}
+                            </p>
+                         </div>
+                      </div>
+                   </div>
+                 </div>
+              </div>
+
+              <div className="group [perspective:1500px]">
+                <div className="bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-10 shadow-[0_20px_40px_rgba(0,0,0,0.5)] mt-8 transition-all duration-500 ease-out [transform:rotateX(10deg)] group-hover:[transform:rotateX(0deg)]">
+                   <div className="flex justify-between items-center mb-8">
+                      <h3 className="font-bold text-white flex items-center gap-2 text-xl"><Compass size={22} className="text-purple-400"/> 为你专属推荐</h3>
+                      <button onClick={() => setActiveTab('library')} className="text-sm font-bold text-gray-400 hover:text-white bg-white/5 px-6 py-2.5 rounded-xl transition-colors">
+                        进入课程海库
+                      </button>
+                   </div>
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                      {loading ? (
+                         <div className="col-span-full py-16 text-center text-gray-500 text-sm border border-dashed border-gray-800 rounded-2xl bg-white/5 animate-pulse">
+                            AI 节点数据同步中...
+                         </div>
+                      ) : recommendations.length > 0 ? (
+                         recommendations.slice(0, 4).map((course: any, idx: number) => (
+                            <div key={idx} onClick={() => handleEnterCourse(course)} className="bg-gradient-to-br from-white/5 to-[#1A1D27] p-6 rounded-2xl border border-white/5 hover:border-purple-500/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] transition-all cursor-pointer hover:-translate-y-1 flex flex-col h-full">
+                               <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center mb-4 transition-transform hover:scale-110">
+                                  <Sparkles size={20} className="text-purple-400"/>
+                               </div>
+                               <h4 className="font-bold text-base text-gray-200 hover:text-white mb-2 flex-grow">{course.title}</h4>
+                               <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
+                                 <span className="text-xs text-gray-500">难度 Lvl.{course.difficulty || 1}</span>
+                                 <span className="text-xs text-green-400 font-mono font-bold bg-green-500/10 px-2 py-1 rounded">+{course.baseReward || 20} 积分</span>
+                               </div>
+                            </div>
+                         ))
+                      ) : (
+                         <div className="col-span-full py-16 text-center text-gray-500 text-sm border border-dashed border-gray-800 rounded-2xl bg-white/5">
+                            <Hexagon size={40} className="mx-auto mb-3 opacity-30 text-gray-600" />
+                            <p>AI 推荐引擎静默，等待预言机下发课程数据</p>
+                         </div>
+                      )}
+                   </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {activeTab === 'tasks' && (
+             <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-right-8 duration-500 pb-20">
+                <div className="flex items-center gap-4 mb-10">
+                   <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30">
+                     <Target size={32} className="text-white" />
+                   </div>
+                   <div>
+                     <h2 className="text-4xl font-black text-white">极客任务与成就大厅</h2>
+                     <p className="text-gray-400 mt-2">完成所有挑战，解锁专属于你的 Web3 灵魂绑定徽章 (SBT)</p>
+                   </div>
+                </div>
+
+                <div className="bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
+                  <h3 className="text-xl font-bold mb-8 flex justify-between items-center border-b border-white/5 pb-4">
+                    <span>🔥 每日悬赏令</span>
+                    <span className="text-sm font-mono bg-purple-500/10 text-purple-400 px-3 py-1 rounded-lg border border-purple-500/20">每日 00:00 刷新</span>
                   </h3>
                   
-                  {/* 任务列表 */}
-                  <div className="space-y-3 flex-1 overflow-y-auto pr-2 hide-scrollbar">
-                    {visibleTasks.map((task: any) => (
-                      <div key={task.id} className={`p-4 rounded-2xl border transition-all ${task.completed ? 'bg-green-500/5 border-green-500/20 opacity-60' : 'bg-white/5 border-white/5'}`}>
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-3">
-                            {task.completed ? <CheckCircle2 size={18} className="text-green-500" /> : <Circle size={18} className="text-gray-600" />}
-                            <span className={`text-sm font-bold ${task.completed ? 'text-gray-400' : 'text-white'}`}>{task.label}</span>
+                  <div className="space-y-4">
+                    {allTasks.map((task: any) => (
+                      <div key={task.id} className={`p-6 rounded-2xl border transition-all ${task.completed ? 'bg-green-500/5 border-green-500/20 opacity-70' : 'bg-[#1A1D27] border-white/5 hover:border-purple-500/30'}`}>
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="flex items-center gap-4">
+                            {task.completed ? <CheckCircle2 size={24} className="text-green-500" /> : <Circle size={24} className="text-gray-600" />}
+                            <div>
+                              <span className={`text-lg font-bold block ${task.completed ? 'text-gray-400' : 'text-white'}`}>{task.label}</span>
+                              <span className="text-xs text-gray-500 mt-1 font-mono">进度: {task.current} / {task.target}</span>
+                            </div>
                           </div>
-                          <span className="text-xs font-bold text-purple-400">+{task.reward}</span>
+                          <div className="flex items-center gap-4">
+                            <span className="text-lg font-black text-purple-400 bg-purple-500/10 px-4 py-1.5 rounded-xl border border-purple-500/20">
+                              💎 +{task.reward}
+                            </span>
+                            {!task.completed && (
+                              <button onClick={() => setActiveTab('library')} className="bg-white/5 hover:bg-white/10 text-sm font-bold text-gray-300 px-4 py-2 rounded-xl transition-colors">
+                                去完成
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                          <div className={`h-full transition-all duration-1000 ${task.completed ? 'bg-green-500' : 'bg-purple-600'}`} style={{ width: `${Math.min((task.current / task.target) * 100, 100)}%` }}></div>
+                        <div className="w-full h-2 bg-[#09090b] rounded-full overflow-hidden shadow-inner">
+                          <div className={`h-full transition-all duration-1000 ${task.completed ? 'bg-green-500' : 'bg-gradient-to-r from-purple-600 to-blue-500'}`} style={{ width: `${Math.min((task.current / task.target) * 100, 100)}%` }}></div>
                         </div>
                       </div>
                     ))}
                   </div>
-
-                  {/* 炫酷下拉框按钮 */}
-                  {allTasks.length > 3 && (
-                    <div className="mt-4 pt-4 border-t border-white/5 shrink-0">
-                      <button 
-                        onClick={() => setIsTasksExpanded(!isTasksExpanded)} 
-                        className="w-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white py-2 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all duration-300"
-                      >
-                        {isTasksExpanded ? (
-                          <>收起隐藏任务 <ChevronUp size={14} /></>
-                        ) : (
-                          <>展开其余 {allTasks.length - 3} 个任务 <ChevronDown size={14} /></>
-                        )}
-                      </button>
-                    </div>
-                  )}
                 </div>
-              </div>
-
-              {/* ================= 下排：趋势图与推荐课程 ================= */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                {/* 3. 学习进度趋势 (占据左侧 2 列) */}
-                <div className="lg:col-span-2 bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
-                  <div className="flex justify-between items-center mb-10">
-                    <div>
-                      <h3 className="text-xl font-black text-white mb-1">一周学习成就趋势</h3>
-                      <p className="text-sm text-gray-500">积分随每日学习记录实时波动上涨 (近 7 天)</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex items-center gap-2 bg-green-500/10 px-3 py-1 rounded-lg text-green-400 text-xs font-bold">
-                        <TrendingUp size={14} /> 本周表现
-                      </div>
-                    </div>
-                  </div>
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={getDynamicChartData()}>
-                        <defs>
-                          <linearGradient id="colorPoints" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#9333ea" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#9333ea" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                        <XAxis dataKey="name" stroke="#3f3f46" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#3f3f46" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}`} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0F111A', border: '1px solid #ffffff10', borderRadius: '12px' }} />
-                        <Area type="monotone" dataKey="points" stroke="#9333ea" strokeWidth={4} fillOpacity={1} fill="url(#colorPoints)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* 4. 推荐课程展示区 (占据右侧 1 列) */}
-                <div className="lg:col-span-1 bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl flex flex-col">
-                  <div className="flex justify-between items-center mb-6 shrink-0">
-                    <h3 className="font-bold text-lg text-white">推荐课程</h3>
-                    <button onClick={() => setActiveTab('library')} className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
-                      查看全部
-                    </button>
-                  </div>
-                  
-                  {loading ? (
-                    <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-                      <span className="animate-pulse">数据同步中...</span>
-                    </div>
-                  ) : recommendations.length > 0 ? (
-                    <div className="space-y-4 flex-1 overflow-y-auto hide-scrollbar">
-                      {recommendations.slice(0, 3).map((course: any, idx: number) => (
-                        <div key={course.id || idx} onClick={() => handleEnterCourse(course)} className="bg-white/5 rounded-2xl p-4 border border-white/5 cursor-pointer hover:border-purple-500/50 hover:bg-white/10 transition-all group flex gap-4 items-center">
-                           {/* 左侧方形封面 */}
-                           <div className="w-16 h-16 shrink-0 bg-gradient-to-br from-purple-900/40 to-blue-900/40 border border-purple-500/20 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
-                              <BookOpen size={24} className="text-purple-400 opacity-80" />
-                           </div>
-                           {/* 右侧文字信息 */}
-                           <div className="flex-1 min-w-0">
-                             <h4 className="text-sm font-bold text-white truncate mb-1">{course.title}</h4>
-                             <p className="text-[10px] text-gray-500 mb-2">难度: {course.difficulty || '初级'} · {course.minStudyTime || 10}秒</p>
-                             <p className="text-xs text-purple-400 font-bold bg-purple-500/10 inline-block px-2 py-0.5 rounded">
-                               +{course.baseReward || 20} 积分
-                             </p>
-                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-600 text-sm border border-dashed border-gray-800 rounded-2xl">
-                      <span className="text-3xl mb-3 opacity-50">📭</span>
-                      <p className="px-4 text-center">等待后端 AI 节点<br/>下发课程数据</p>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </div>
+             </div>
           )}
 
-          {/* ================= 其他模块视图 ================= */}
           {activeTab === 'library' && (
-             <div className="max-w-7xl mx-auto">
-                <h2 className="text-4xl font-black mb-10">课程库</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                   <div className="col-span-full text-center py-20 bg-[#1A1D27]/50 rounded-3xl border border-dashed border-gray-700">
-                     <BookOpen size={48} className="mx-auto mb-4 opacity-30 text-gray-400" />
-                     <p className="text-gray-500 font-bold">等待后端 AI 节点与管理端下发课程数据...</p>
-                   </div>
+             <div className="max-w-5xl mx-auto pb-20 animate-in fade-in duration-500">
+                <h2 className="text-4xl font-black mb-10 text-center">Web3 技能演进树</h2>
+                
+                <div className="relative flex flex-col items-center py-10 min-h-[400px]">
+                   <div className="absolute top-0 bottom-0 w-1 bg-gradient-to-b from-purple-600/50 via-blue-500/50 to-transparent"></div>
+                   
+                   {loading ? (
+                     <div className="z-10 bg-[#0F111A] p-6 rounded-2xl border border-purple-500/50 animate-pulse text-purple-400 font-mono text-sm mt-20">
+                       [ AI 路由计算中，正在为您生成最佳学习路径... ]
+                     </div>
+                   ) : recommendations.length > 0 ? (
+                     recommendations.map((course: any, idx: number) => (
+                        <div key={idx} className={`relative flex items-center w-full my-8 ${idx % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+                           <div className={`absolute top-1/2 w-1/2 h-[2px] bg-purple-500/30 ${idx % 2 === 0 ? 'right-1/2' : 'left-1/2'}`}></div>
+                           
+                           <div onClick={() => handleEnterCourse(course)} className="z-10 w-[45%] bg-[#1A1D27] border border-white/10 p-6 rounded-2xl hover:border-purple-500 hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all cursor-pointer group">
+                             <h3 className="font-bold text-lg text-white group-hover:text-purple-300 mb-2">{course.title}</h3>
+                             <div className="flex justify-between items-center mt-4">
+                                <span className="text-xs text-gray-500 font-mono">等级 Lvl.{course.difficulty || 1}</span>
+                                <span className="text-xs font-black text-green-400 bg-green-500/10 px-2 py-1 rounded">+{course.baseReward || 20} 积分</span>
+                             </div>
+                           </div>
+                           
+                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-purple-500 rounded-full border-4 border-[#07080e] shadow-[0_0_10px_#a855f7] z-20"></div>
+                        </div>
+                     ))
+                   ) : (
+                     <div className="z-10 bg-[#0F111A] border border-dashed border-gray-700 p-10 rounded-3xl text-center mt-20">
+                        <Hexagon size={48} className="mx-auto text-gray-600 mb-4" />
+                        <p className="text-gray-500">技能树尚未解锁。等待后端 AI 节点下发课程数据。</p>
+                     </div>
+                   )}
                 </div>
              </div>
           )}
 
           {activeTab === 'mall' && (
-             <div className="max-w-7xl mx-auto">
+             <div className="max-w-7xl mx-auto pb-20">
                 <h2 className="text-4xl font-black mb-10">积分商城</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-10 p-4">
                    {mallItems.map((item: any) => (
-                     <div key={item.id} className="bg-[#0F111A] border border-white/5 rounded-3xl p-4 flex flex-col group">
-                        <div className="h-40 rounded-2xl overflow-hidden mb-4">
-                           <img src={item.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                        </div>
-                        <h4 className="text-sm font-bold mb-1 truncate">{item.name}</h4>
-                        <div className="flex justify-between items-center mt-auto">
-                           <span className="text-purple-400 font-black text-sm">💎 {item.points}</span>
-                           <button onClick={() => handleRedeem(item)} className="bg-white/5 hover:bg-purple-600 px-3 py-1 rounded-lg text-xs font-bold transition-all">兑换</button>
+                     <div key={item.id} className="relative group [perspective:1500px]">
+                        <div className="h-[340px] w-full bg-gradient-to-br from-white/10 to-[#ffffff05] backdrop-blur-xl border border-white/20 rounded-3xl p-5 flex flex-col transition-all duration-700 ease-out shadow-[-20px_20px_30px_rgba(0,0,0,0.5)] group-hover:shadow-[0_0_50px_rgba(168,85,247,0.4)] [transform:rotateX(20deg)_rotateY(-20deg)] group-hover:[transform:rotateX(0deg)_rotateY(0deg)_scale(1.05)]">
+                           <div className="h-40 rounded-2xl overflow-hidden mb-4 relative shadow-inner">
+                              <img src={item.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-[#09090b]/90 via-transparent to-transparent opacity-80"></div>
+                           </div>
+                           <h4 className="text-base font-bold mb-1 truncate text-gray-200 group-hover:text-white transition-colors drop-shadow-md">{item.name}</h4>
+                           <div className="flex justify-between items-center mt-auto pt-4 border-t border-white/10">
+                              <span className="text-purple-400 font-black text-sm bg-purple-500/10 px-3 py-1.5 rounded-lg border border-purple-500/20 shadow-inner">
+                                💎 {item.points}
+                              </span>
+                              <button onClick={() => handleRedeem(item)} className="bg-white/5 hover:bg-purple-600 text-gray-300 hover:text-white px-5 py-2 rounded-xl text-xs font-bold transition-all border border-white/10 hover:border-purple-500 shadow-lg">
+                                兑换
+                              </button>
+                           </div>
                         </div>
                      </div>
                    ))}
@@ -454,44 +834,71 @@ function App() {
           )}
 
           {activeTab === 'profile' && (
-             <div className="max-w-5xl mx-auto space-y-10">
+             <div className="max-w-5xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 pb-20">
                 <h2 className="text-4xl font-black mb-10">个人成就中心</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                   <div>
-                      <h3 className="font-bold mb-6 text-gray-400">学习历史记录</h3>
+                   <div className="bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
+                      <h3 className="font-bold mb-8 text-gray-400 flex items-center gap-3 text-lg">
+                         <BookOpen size={20} className="text-purple-400" /> 链上学习记录
+                      </h3>
                       <div className="space-y-4">
                         {earnHistory.length === 0 ? (
-                           <div className="p-8 text-center border border-dashed border-gray-800 rounded-2xl">
-                             <p className="text-gray-600 text-sm">暂无链上数据记录</p>
+                           <div className="p-10 text-center border border-dashed border-gray-800 rounded-[1.5rem] bg-white/5">
+                             <p className="text-gray-500">暂无链上数据记录</p>
                            </div>
                         ) : earnHistory.map((h: any, i: number) => (
-                          <div key={i} className="bg-[#0F111A] p-5 rounded-2xl border border-white/5 flex justify-between items-center">
+                          <div key={i} className="bg-[#1A1D27] p-5 rounded-2xl border border-white/5 flex justify-between items-center hover:border-purple-500/30 transition-colors">
                              <div>
-                                <p className="font-bold text-sm">{h.title}</p>
-                                <p className="text-xs text-gray-500 mt-1">{formatDate(h.createdAt)}</p>
+                                <p className="font-bold text-sm text-gray-200">{h.title}</p>
+                                <p className="text-xs text-gray-500 mt-1 font-mono">{formatDate(h.createdAt)}</p>
                              </div>
-                             <span className="text-green-400 font-bold">+{h.reward}</span>
+                             <span className="text-green-400 font-black text-lg bg-green-500/10 px-3 py-1 rounded-lg">+{h.reward}</span>
                           </div>
                         ))}
                       </div>
                    </div>
-                   <div>
-                      <h3 className="font-bold mb-6 text-gray-400">权益兑换历史</h3>
+                   
+                   <div className="bg-[#0F111A] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
+                      <h3 className="font-bold mb-8 text-gray-400 flex items-center gap-3 text-lg">
+                         <ShoppingBag size={20} className="text-purple-400" /> 权益兑换历史
+                      </h3>
                       <div className="space-y-4">
                         {redemptionHistory.length === 0 ? (
-                           <div className="p-8 text-center border border-dashed border-gray-800 rounded-2xl">
-                             <p className="text-gray-600 text-sm">暂无链上兑换记录</p>
+                           <div className="p-10 text-center border border-dashed border-gray-800 rounded-[1.5rem] bg-white/5">
+                             <p className="text-gray-500">暂无链上兑换记录</p>
                            </div>
                         ) : redemptionHistory.map((r: any, i: number) => (
-                          <div key={i} className="bg-[#0F111A] p-5 rounded-2xl border border-white/5 flex justify-between items-center">
+                          <div key={i} className="bg-[#1A1D27] p-5 rounded-2xl border border-white/5 flex justify-between items-center hover:border-red-500/30 transition-colors">
                              <div>
-                                <p className="font-bold text-sm">{r.itemName}</p>
-                                <p className="text-xs text-gray-500 mt-1">{formatDate(r.createdAt)}</p>
+                                <p className="font-bold text-sm text-gray-200">{r.itemName}</p>
+                                <p className="text-xs text-gray-500 mt-1 font-mono">{formatDate(r.createdAt)}</p>
                              </div>
-                             <span className="text-red-400 font-bold">-{r.cost}</span>
+                             <span className="text-red-400 font-black text-lg bg-red-500/10 px-3 py-1 rounded-lg">-{r.cost}</span>
                           </div>
                         ))}
                       </div>
+                   </div>
+                </div>
+
+                <div className="bg-gradient-to-b from-[#12141F] to-[#0A0C12] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl mt-10">
+                   <h3 className="font-bold mb-8 text-white flex items-center gap-3 text-xl">
+                      <Medal size={24} className="text-yellow-400" /> 灵魂绑定徽章 (SBT) 藏品柜
+                   </h3>
+                   <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                      {sbtBadges.length > 0 ? (
+                         sbtBadges.map((badge, idx) => (
+                            <div key={idx} className="bg-white/5 border border-purple-500/30 rounded-2xl p-6 flex flex-col items-center shadow-[0_0_20px_rgba(168,85,247,0.2)] hover:-translate-y-2 transition-transform cursor-pointer">
+                               <Medal size={40} className="text-purple-400 mb-3" />
+                               <span className="text-xs font-bold text-white text-center">{badge.name}</span>
+                            </div>
+                         ))
+                      ) : (
+                         <div className="col-span-full py-16 text-center border border-dashed border-white/10 rounded-3xl">
+                            <Sparkles size={48} className="mx-auto text-gray-600 mb-4 opacity-50" />
+                            <p className="text-gray-400 font-bold">藏品柜空空如也</p>
+                            <p className="text-xs text-gray-600 mt-2">完成终极极客挑战，智能合约将为您空投不可篡改的 SBT 徽章。</p>
+                         </div>
+                      )}
                    </div>
                 </div>
              </div>
@@ -502,28 +909,28 @@ function App() {
 
       {/* 沉浸式答题弹窗 */}
       {selectedCourse && (
-        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex items-center justify-center p-10">
-          <div className="bg-[#0F111A] border border-white/10 w-full max-w-5xl rounded-[3rem] p-12 relative h-[85vh] flex flex-col">
-             <button onClick={() => setSelectedCourse(null)} className="absolute top-10 right-10 text-gray-500 hover:text-white">✕</button>
-             <h2 className="text-3xl font-black mb-8">{selectedCourse.title}</h2>
-             <div className="flex-1 overflow-y-auto pr-4 scrollbar-hide">
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex items-center justify-center p-10 animate-in fade-in zoom-in-95 duration-300">
+          <div className="bg-[#0F111A] border border-white/10 w-full max-w-5xl rounded-[3rem] p-12 relative h-[85vh] flex flex-col shadow-[0_0_50px_rgba(168,85,247,0.1)]">
+             <button onClick={() => setSelectedCourse(null)} className="absolute top-8 right-8 text-gray-500 hover:text-white bg-white/5 hover:bg-red-500/80 p-3 rounded-full transition-all z-50">✕</button>
+             <h2 className="text-3xl font-black mb-8 pr-16 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">{selectedCourse.title}</h2>
+             
+             <div className="flex-1 overflow-y-auto pr-4 hide-scrollbar">
                 {isViewingVideo ? (
-                  <div className="aspect-video bg-black rounded-[2rem] overflow-hidden border border-white/5 flex items-center justify-center">
+                  <div className="aspect-video bg-[#050505] rounded-[2rem] overflow-hidden border border-white/5 flex items-center justify-center shadow-2xl relative">
                     <video src={selectedCourse.videoUrl} controls autoPlay className="w-full h-full" />
+                    {!selectedCourse.videoUrl && <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600"><BookOpen size={48} className="mb-4 opacity-30"/><p>等待视频流接入</p></div>}
                   </div>
                 ) : (
-                  <div className="space-y-8">
+                  <div className="space-y-6">
                      {selectedCourse.questions?.map((q: any, idx: number) => (
-                       <div key={idx} className="bg-white/5 p-8 rounded-[2rem] border border-white/5">
-                          <p className="text-xl font-bold mb-6 text-purple-400">Q{idx + 1}. {q.question}</p>
-                          <div className="grid grid-cols-2 gap-4">
+                       <div key={idx} className="bg-white/5 p-8 rounded-[2rem] border border-white/5 hover:border-purple-500/30 transition-colors">
+                          <p className="text-xl font-bold mb-6 text-white flex gap-3"><span className="text-purple-400">Q{idx + 1}.</span> {q.question}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                              {q.options?.map((opt: string, oIdx: number) => (
                                <button 
                                  key={oIdx} 
-                                 onClick={() => {
-                                    const n = [...answers]; n[idx] = opt; setAnswers(n);
-                                 }}
-                                 className={`p-4 rounded-xl border text-left text-sm transition-all ${answers[idx] === opt ? 'border-purple-500 bg-purple-500/10 text-white' : 'border-white/5 text-gray-500 hover:border-white/20'}`}
+                                 onClick={() => { const n = [...answers]; n[idx] = opt; setAnswers(n); }}
+                                 className={`p-5 rounded-2xl border text-left text-sm font-medium transition-all ${answers[idx] === opt ? 'border-purple-500 bg-purple-500/20 text-white shadow-[0_0_20px_rgba(168,85,247,0.2)]' : 'border-white/5 text-gray-400 hover:border-white/20 hover:bg-white/10'}`}
                                >
                                  {opt}
                                </button>
@@ -534,9 +941,10 @@ function App() {
                   </div>
                 )}
              </div>
-             <div className="pt-8 mt-auto">
-                <button onClick={isViewingVideo ? () => setIsViewingVideo(false) : handleSubmit} className="w-full py-5 rounded-2xl bg-purple-600 font-black text-lg shadow-2xl shadow-purple-600/20">
-                   {isViewingVideo ? "我已看完，开始测试" : "提交后端 AI 预言机"}
+             
+             <div className="pt-8 mt-auto shrink-0">
+                <button onClick={isViewingVideo ? () => setIsViewingVideo(false) : handleSubmit} className="w-full py-5 rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 font-black text-lg text-white shadow-lg shadow-purple-500/25 transition-all hover:scale-[1.02]">
+                   {isViewingVideo ? "✅ 视频学习完成，进入 AI 测验" : "🚀 提交后端 AI 预言机进行防伪验证"}
                 </button>
              </div>
           </div>
